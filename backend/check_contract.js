@@ -1,0 +1,1 @@
+const hre = require('hardhat'); async function main() { const code = await hre.ethers.provider.getCode('0x0165878A594ca255338adfa4d48449f69242Eb8F'); console.log('Code length:', code.length); if(code.length <= 2) console.log('EMPTY'); else console.log('EXISTS'); } main();
