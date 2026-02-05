@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "D:\\CNCK\\RiceTracking\\backend\\contracts\\RiceTracking.sol": {
-      "lastModificationDate": 1770286848974,
-      "contentHash": "7ce7c84a6cc1ccc19a8bb6ce919df2f7",
+      "lastModificationDate": 1770308949359,
+      "contentHash": "2f48d094300d1b0d64f9564a49c80da6",
       "sourceName": "contracts/RiceTracking.sol",
       "solcConfig": {
         "version": "0.8.24",

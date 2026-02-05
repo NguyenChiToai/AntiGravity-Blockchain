@@ -53,6 +53,13 @@ function AdminDashboard({ contract, account }) {
     };
     checkAdmin();
     fetchFarmers();
+
+    // Auto-refresh every 5 seconds to catch new requests
+    const interval = setInterval(() => {
+      fetchFarmers();
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [contract, account]);
 
   const validateAndExecute = async (actionName, actionFunc, address) => {

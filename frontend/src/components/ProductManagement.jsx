@@ -492,7 +492,8 @@ function ProductManagement({ contract, account, userRole }) {
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-4 text-right text-sm">
-                                                    {(userRole === 'admin' || (userRole === 'farmer' && batch.farmer.toLowerCase() === account.toLowerCase())) && (
+                                                    {/* Chỉ Admin mới được quyền xóa/ẩn */}
+                                                    {userRole === 'admin' && (
                                                         <button
                                                             onClick={() => handleDelete(batch.id)}
                                                             className="text-red-600 hover:text-red-900 font-medium bg-red-50 hover:bg-red-100 px-3 py-1 rounded text-xs transition border border-red-200"

@@ -1,86 +1,150 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+/**
+ * @title RiceTracking (Hệ Thống Truy Xuất Nguồn Gốc Gạo)
+ * @dev Hợp đồng thông minh quản lý vòng đời sản phẩm từ Nông Dân -> Nhà Máy -> Người Tiêu Dùng.
+ *      Được thiết kế cho đồ án tốt nghiệp, tập trung vào tính minh bạch và bất biến.
+ */
 contract RiceTracking {
-    enum State { PADDY_HARVESTED, PROCESSED_PACKAGED, SOLD, DELETED }
+    // ------------------------------------------
+    // 1. CẤU TRÚC DỮ LIỆU (DATA STRUCTURES)
+    // ------------------------------------------
 
-    struct RiceBatch {
-        uint256 id;
-        string variety;         // Giống lúa
-        string origin;          // Vùng trồng
-        address farmer;         // Ví nông dân
-        address miller;         // Ví nhà máy
-        uint256 harvestDate;    // Ngày gặt
-        uint256 millingDate;    // Ngày xay xát
-        bool isOrganic;         // Hữu cơ
-        State state;
-        string ipfsHash;        // Ảnh
+    // Các trạng thái của lô lúa
+    enum State { 
+        PADDY_HARVESTED,    // 0: Lúa vừa thu hoạch (Nông dân tạo)
+        PROCESSED_PACKAGED, // 1: Đã qua chế biến & đóng gói (Nhà máy xử lý)
+        SOLD,               // 2: Đã bán cho khách hàng
+        DELETED             // 3: Đánh dấu đã xóa (Chỉ hiển thị với Admin)
     }
 
+    // Thông tin chi tiết một lô lúa
+    struct RiceBatch {
+        uint256 id;             // ID duy nhất của lô
+        string variety;         // Giống lúa (VD: ST25, OM5451...)
+        string origin;          // Vùng trồng (VD: Sóc Trăng, Cần Thơ...)
+        address farmer;         // Địa chỉ ví Nông Dân
+        address miller;         // Địa chỉ ví Nhà Máy (Người chế biến)
+        uint256 harvestDate;    // Thời gian thu hoạch (Lưu Timestamp)
+        uint256 millingDate;    // Thời gian chế biến
+        bool isOrganic;         // Xác nhận đạt chuẩn Hữu cơ (Organic)
+        State state;            // Trạng thái hiện tại
+        string ipfsHash;        // Hash ảnh lưu trên IPFS/Link ảnh
+    }
+
+    // Lưu trữ danh sách lô lúa (Mapping giúp tiết kiệm Gas hơn Array)
     mapping(uint256 => RiceBatch) public batches;
     uint256 public batchCount;
 
-    // Phân quyền
-    address public admin;
+    // ------------------------------------------
+    // 2. PHÂN QUYỀN & QUẢN LÝ USER
+    // ------------------------------------------
+
+    address public admin;       // Người quản trị cao nhất (Triển khai hợp đồng)
+    
+    // Hệ thống danh sách trắng (Whitelist) cho Nông Dân và Nhà Máy
     mapping(address => bool) public farmers;
-    address[] public farmerList; // Mảng lưu danh sách nông dân để hiển thị
+    address[] public farmerList; // Mảng phụ để Admin dễ dàng hiển thị danh sách
+    
     mapping(address => bool) public millers;
 
-    // Yêu cầu quyền (Pending Requests)
+    // Danh sách chờ duyệt (Pending Requests)
     mapping(address => bool) public pendingFarmers;
     address[] public requesterList;
 
+    // ------------------------------------------
+    // 3. SỰ KIỆN (EVENTS) - GHI LOG BLOCKCHAIN
+    // ------------------------------------------
     event PaddyCreated(uint256 indexed id, string variety, address indexed farmer);
     event RiceProcessed(uint256 indexed id, address indexed miller);
-    event RoleGranted(bytes32 role, address indexed account);
-    event RoleRevoked(bytes32 role, address indexed account);
     event BatchDeleted(uint256 indexed id, address indexed deleter);
     event BatchImageUpdated(uint256 indexed id, string newIpfsHash);
 
+    // ------------------------------------------
+    // 4. CÁC HÀM KIỂM TRA (MODIFIERS)
+    // ------------------------------------------
+
     modifier onlyAdmin() {
-        require(msg.sender == admin, "Only admin");
+        require(msg.sender == admin, unicode"Chỉ Admin mới có quyền này");
         _;
     }
 
     modifier onlyFarmer() {
-        require(farmers[msg.sender], "Only farmer");
+        require(farmers[msg.sender], unicode"Chỉ Nông Dân được cấp quyền mới thực hiện được");
         _;
     }
 
     modifier onlyMiller() {
-        require(millers[msg.sender], "Only miller");
+        require(millers[msg.sender], unicode"Chỉ Nhà Máy được cấp quyền mới thực hiện được");
         _;
     }
 
+    // ------------------------------------------
+    // 5. LOGIC CHÍNH (MAIN FUNCTIONS)
+    // ------------------------------------------
+
     constructor() {
-        admin = msg.sender;
+        // NGƯỜI DEPLOY (Account #0) LÀ ADMIN DUY NHẤT & VĨNH VIỄN
+        admin = msg.sender; 
     }
 
+    /**
+     * @dev Chức năng: Đăng ký xin làm Nông Dân
+     * Người lạ gọi hàm này để gửi yêu cầu đến Admin
+     */
+    function requestFarmerRole() public {
+        require(!farmers[msg.sender], unicode"Bạn đã là Nông Dân rồi");
+        require(!pendingFarmers[msg.sender], unicode"Yêu cầu đang được xử lý");
+        
+        pendingFarmers[msg.sender] = true;
+        requesterList.push(msg.sender);
+    }
+
+    /**
+     * @dev Chức năng: Admin duyệt yêu cầu
+     * @param _farmer Địa chỉ ví người được duyệt
+     */
     function addFarmer(address _farmer) public onlyAdmin {
         if (!farmers[_farmer]) {
             farmers[_farmer] = true;
             farmerList.push(_farmer);
         }
-        // Sau khi duyệt, xóa khỏi danh sách chờ (nếu có)
+        // Duyệt xong xóa khỏi danh sách chờ
         if (pendingFarmers[_farmer]) {
             pendingFarmers[_farmer] = false;
             _removeFromList(requesterList, _farmer);
         }
     }
 
-    function requestFarmerRole() public {
-        require(!farmers[msg.sender], "Already a farmer");
-        require(!pendingFarmers[msg.sender], "Request already pending");
+    /**
+     * @dev Chức năng: Admin xóa quyền Nông Dân
+     */
+    function removeFarmer(address _farmer) public onlyAdmin {
+        require(farmers[_farmer], unicode"Ví này không phải Nông Dân");
+        farmers[_farmer] = false;
         
-        pendingFarmers[msg.sender] = true;
-        requesterList.push(msg.sender);
+        // Xóa khỏi danh sách hiển thị
+        for (uint i = 0; i < farmerList.length; i++) {
+            if (farmerList[i] == _farmer) {
+                farmerList[i] = farmerList[farmerList.length - 1]; // Đổi chỗ phần tử cuối
+                farmerList.pop(); // Xóa phần tử cuối
+                break;
+            }
+        }
     }
 
+    // Lấy danh sách yêu cầu chờ duyệt
     function getRequesters() public view returns (address[] memory) {
         return requesterList;
     }
 
-    // Helper: Xóa phần tử khỏi mảng address[]
+    // Lấy danh sách nông dân chính thức
+    function getAllFarmers() public view returns (address[] memory) {
+        return farmerList;
+    }
+
+    // Helper: Hàm nội bộ hỗ trợ xóa phần tử khỏi mảng
     function _removeFromList(address[] storage list, address item) internal {
         for (uint i = 0; i < list.length; i++) {
             if (list[i] == item) {
@@ -91,42 +155,22 @@ contract RiceTracking {
         }
     }
 
-    function removeFarmer(address _farmer) public onlyAdmin {
-        require(farmers[_farmer], "Not a farmer");
-        farmers[_farmer] = false;
-        
-        // Xóa khỏi mảng (Swap & Pop)
-        for (uint i = 0; i < farmerList.length; i++) {
-            if (farmerList[i] == _farmer) {
-                farmerList[i] = farmerList[farmerList.length - 1];
-                farmerList.pop();
-                break;
-            }
-        }
-    }
+    // ------------------------------------------
+    // 6. QUẢN LÝ SẢN PHẨM (CORE FEATURES)
+    // ------------------------------------------
 
-    // Hàm lấy danh sách nông dân
-    function getAllFarmers() public view returns (address[] memory) {
-        return farmerList;
-    }
-
-    function addMiller(address _miller) public onlyAdmin {
-        millers[_miller] = true;
-    }
-
-    function removeMiller(address _miller) public onlyAdmin {
-        millers[_miller] = false;
-    }
-
+    /**
+     * @dev Nông dân tạo lô lúa mới sau khi gặt
+     */
     function createPaddyBatch(string memory _variety, string memory _origin, bool _isOrganic, string memory _ipfsHash) public {
-        require(farmers[msg.sender] || msg.sender == admin, "Only farmer or admin");
+        require(farmers[msg.sender] || msg.sender == admin, unicode"Không có quyền");
         batchCount++;
         batches[batchCount] = RiceBatch({
             id: batchCount,
             variety: _variety,
             origin: _origin,
             farmer: msg.sender,
-            miller: address(0),
+            miller: address(0), // Chưa qua nhà máy
             harvestDate: block.timestamp,
             millingDate: 0,
             isOrganic: _isOrganic,
@@ -136,46 +180,38 @@ contract RiceTracking {
         emit PaddyCreated(batchCount, _variety, msg.sender);
     }
 
-    function processRice(uint256 _id, string memory _newIpfsHash) public onlyMiller {
-        RiceBatch storage batch = batches[_id];
-        require(batch.state == State.PADDY_HARVESTED, "Invalid state");
-        
-        batch.miller = msg.sender;
-        batch.millingDate = block.timestamp;
-        batch.state = State.PROCESSED_PACKAGED;
-        if (bytes(_newIpfsHash).length > 0) {
-            batch.ipfsHash = _newIpfsHash; // Cập nhật ảnh bao bì nếu có
-        }
-        
-        emit RiceProcessed(_id, msg.sender);
-    }
-
-    function deleteBatch(uint256 _id) public {
-        RiceBatch storage batch = batches[_id];
-        require(batch.id != 0, "Batch does not exist");
-        require(msg.sender == admin || msg.sender == batch.farmer, "Unauthorized");
-        
-        batch.state = State.DELETED;
-        emit BatchDeleted(_id, msg.sender);
-    }
-
-    // Hàm sửa thông tin lô lúa (Admin/Farmer/Miller đều có thể sửa ảnh, nhưng chỉ Admin/Farmer sửa thông tin gốc)
+    /**
+     * @dev Cập nhật thông tin lô lúa (Chỉnh sửa nếu nhập sai)
+     */
     function updateBatch(uint256 _id, string memory _variety, string memory _origin, bool _isOrganic, string memory _ipfsHash) public {
         RiceBatch storage batch = batches[_id];
-        require(batch.id != 0, "Batch does not exist");
-        require(msg.sender == admin || msg.sender == batch.farmer || farmers[msg.sender], "Unauthorized");
+        require(batch.id != 0, unicode"Lô hàng không tồn tại");
+        require(msg.sender == admin || msg.sender == batch.farmer, unicode"Không chính chủ");
 
         batch.variety = _variety;
         batch.origin = _origin;
         batch.isOrganic = _isOrganic;
         
-        // Chỉ cập nhật ảnh nếu có chuỗi mới (để tiết kiệm gas nếu ko đổi ảnh)
+        // Chỉ cập nhật ảnh nếu có link mới
         if (bytes(_ipfsHash).length > 0) {
             batch.ipfsHash = _ipfsHash;
             emit BatchImageUpdated(_id, _ipfsHash);
         }
     }
+
+    /**
+     * @dev Admin ẩn/xóa lô lúa vi phạm (Soft Delete)
+     * Dữ liệu Blockchain không thể xóa thật, chỉ đổi trạng thái sang DELETED
+     */
+    function deleteBatch(uint256 _id) public onlyAdmin {
+        RiceBatch storage batch = batches[_id];
+        require(batch.id != 0, unicode"Lô hàng không tồn tại");
+        
+        batch.state = State.DELETED;
+        emit BatchDeleted(_id, msg.sender);
+    }
     
+    // Lấy thông tin chi tiết lô hàng
     function getBatch(uint256 _id) public view returns (RiceBatch memory) {
         return batches[_id];
     }
