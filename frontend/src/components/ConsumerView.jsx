@@ -1,14 +1,42 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Scanner } from '@yudiel/react-qr-scanner';
+import QrScanner from 'qr-scanner';
 
 function ConsumerView({ contract }) {
+    const navigate = useNavigate();
+    const [isScanning, setIsScanning] = useState(false);
     const [searchId, setSearchId] = useState('');
     const [batchData, setBatchData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
+    // Shared logic to handle scanned result (from camera or file)
+    const handleScanResult = (rawValue) => {
+        if (!rawValue) return;
+        if (rawValue.includes('/product/')) {
+            const id = rawValue.split('/product/').pop();
+            navigate(`/product/${id}`);
+        } else {
+            setSearchId(rawValue);
+        }
+    };
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const result = await QrScanner.scanImage(file);
+            handleScanResult(result);
+        } catch (error) {
+            console.error(error);
+            alert("Không tìm thấy mã QR trong ảnh này!");
+        }
+    };
     const handleSearch = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault(); // support calling without event
         if (!contract) return alert("Chưa kết nối hệ thống");
+        if (!searchId) return alert("Vui lòng nhập ID hoặc quét QR");
 
         try {
             setLoading(true);
@@ -66,6 +94,27 @@ function ConsumerView({ contract }) {
                     className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 outline-none"
                     placeholder="Nhập mã số lô gạo (hoặc quét QR)..."
                 />
+
+                {/* Button Scan Camera */}
+                <button
+                    type="button"
+                    onClick={() => setIsScanning(true)}
+                    className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-bold hover:bg-gray-200 transition border border-gray-300 flex items-center gap-2"
+                >
+                    📷 <span className="hidden md:inline">Cam</span>
+                </button>
+
+                {/* Button Upload Image */}
+                <label className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-bold hover:bg-gray-200 transition border border-gray-300 flex items-center gap-2 cursor-pointer">
+                    📂 <span className="hidden md:inline">Ảnh QR</span>
+                    <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                    />
+                </label>
+
                 <button
                     type="submit"
                     disabled={loading}
@@ -151,6 +200,38 @@ function ConsumerView({ contract }) {
                             </div>
                         </>
                     )}
+                </div>
+            )}
+
+            {/* Modal Scanner */}
+            {isScanning && (
+                <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex flex-col items-center justify-center p-4">
+                    <div className="bg-white p-4 rounded-xl w-full max-w-sm relative">
+                        <button
+                            onClick={() => setIsScanning(false)}
+                            className="absolute -top-10 right-0 text-white text-xl font-bold p-2"
+                        >
+                            Đóng X
+                        </button>
+                        <h3 className="text-center font-bold mb-4 text-gray-800">Hướng camera về mã QR</h3>
+                        <div className="rounded-lg overflow-hidden border-2 border-orange-500 w-full h-80 relative bg-gray-900">
+                            <Scanner
+                                options={{
+                                    delay: 500,
+                                    // Add any other options you need, e.g.,
+                                    // video: { facingMode: 'environment' },
+                                    finder: false, // This line was in the diff, assuming it's an option for the Scanner component
+                                }}
+                                onScan={(result) => {
+                                    if (result && result.length > 0) {
+                                        handleScanResult(result[0].rawValue);
+                                    }
+                                }}
+                                onError={(e) => console.log(e)}
+                            />
+                        </div>
+                        <p className="text-center text-xs text-gray-500 mt-4">Di chuyển camera để mã QR nằm trong khung hình</p>
+                    </div>
                 </div>
             )}
         </div>

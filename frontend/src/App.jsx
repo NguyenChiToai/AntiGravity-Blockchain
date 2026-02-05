@@ -1,32 +1,45 @@
+
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
+import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import RiceTrackingArtifact from './RiceTracking.json';
 import WalletConnect from './components/WalletConnect';
 import FarmerDashboard from './components/FarmerDashboard';
-import MillerDashboard from './components/MillerDashboard';
 import ConsumerView from './components/ConsumerView';
 import AdminDashboard from './components/AdminDashboard';
-import Login from './components/Login';
+import ProductManagement from './components/ProductManagement';
+import ProductDetail from './components/ProductDetail';
+// Login component removed
 import logo from './assets/logo.svg';
 
-const CONTRACT_ADDRESS = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0";
+const CONTRACT_ADDRESS = "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e";
 
-function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+// --- Trang Chủ Component ---
+const HomePage = () => (
+  <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in">
+    <img src={logo} alt="Logo" className="w-64 h-64 mb-8 drop-shadow-2xl hover:scale-105 transition-transform duration-500" />
+    <h1 className="text-4xl md:text-5xl font-extrabold text-green-800 mb-4 uppercase tracking-tighter">
+      Truy Xuất Nguồn Gốc Gạo
+    </h1>
+    <div className="h-1 w-32 bg-orange-500 mb-6 rounded-full"></div>
+    <p className="text-xl md:text-2xl text-green-600 font-medium tracking-widest uppercase">
+      🌿 Năng Suất Xanh - Nông Nghiệp Sạch 🌿
+    </p>
+  </div>
+);
+
+function AppContent() {
+  // const [isAuthenticated, setIsAuthenticated] = useState(false); // REMOVED
+  // const [currentUser, setCurrentUser] = useState(null); // REMOVED
 
   const [account, setAccount] = useState(null);
   const [contract, setContract] = useState(null);
-  const [role, setRole] = useState('consumer'); // consumer, farmer, miller, admin
+  // const [role, setRole] = useState('consumer'); // UI Role - REMOVED, use Routing
   const [userRole, setUserRole] = useState('consumer'); // Role thực tế từ Blockchain
 
   useEffect(() => {
-    // Luôn logout khi reload trang
-  }, []);
-
-  useEffect(() => {
     const init = async () => {
-      if (window.ethereum && isAuthenticated) {
+      if (window.ethereum) {
         try {
           const provider = new ethers.BrowserProvider(window.ethereum);
           const signer = await provider.getSigner();
@@ -37,7 +50,6 @@ function App() {
           );
           setContract(contractInstance);
 
-          // Chỉ lấy account nếu chưa có (lần đầu load)
           if (!account) {
             const isConnected = localStorage.getItem('isWalletConnected') === 'true';
             if (isConnected) {
@@ -48,32 +60,22 @@ function App() {
               }
             }
           } else {
-            // Nếu đã có account (do đổi ví), check role lại
             checkRole(contractInstance, account);
           }
 
-          // Cleanup listener cũ để tránh duplicate
           window.ethereum.removeAllListeners('accountsChanged');
-
           window.ethereum.on('accountsChanged', async (accounts) => {
             const acc = accounts[0] || null;
             setAccount(acc);
-
-            // Khi đổi account, cần update lại signer cho contract
             if (acc) {
               const newProvider = new ethers.BrowserProvider(window.ethereum);
               const newSigner = await newProvider.getSigner();
-              const newContract = new ethers.Contract(
-                CONTRACT_ADDRESS,
-                RiceTrackingArtifact.abi,
-                newSigner
-              );
+              const newContract = new ethers.Contract(CONTRACT_ADDRESS, RiceTrackingArtifact.abi, newSigner);
               setContract(newContract);
               checkRole(newContract, acc);
             } else {
               setContract(null);
               setUserRole('consumer');
-              setRole('consumer');
             }
           });
         } catch (error) {
@@ -82,15 +84,7 @@ function App() {
       }
     };
     init();
-  }, [isAuthenticated, account]); // Thêm account vào dependency để re-run khi account đổi? Không, sẽ loop.
-  // Cách tốt hơn: Chỉ chạy 1 lần, và handle event.
-  // Nhưng ở trên tôi đã viết logic handle event để update contract. 
-  // Vấn đề là init() phụ thuộc isAuthenticated.
-
-  // Logic sửa đổi:
-  // useEffect chạy khi isAuthenticated thay đổi.
-  // Bên trong init, ta setup listener.
-  // Listener sẽ update account VÀ contract.
+  }, [account]);
 
   const checkRole = async (contractInstance, address) => {
     if (!contractInstance || !address) return;
@@ -98,135 +92,125 @@ function App() {
       const adminAddress = await contractInstance.admin();
       if (address.toLowerCase() === adminAddress.toLowerCase()) {
         setUserRole('admin');
-        // Nếu login web là admin thì auto set role admin
-        if (currentUser?.role === 'admin') setRole('admin');
         return;
       }
-
       const isFarmer = await contractInstance.farmers(address);
       if (isFarmer) {
         setUserRole('farmer');
-        if (currentUser?.role !== 'admin') setRole('farmer');
         return;
       }
-
       const isMiller = await contractInstance.millers(address);
       if (isMiller) {
         setUserRole('miller');
-        if (currentUser?.role !== 'admin') setRole('miller');
         return;
       }
-
       setUserRole('consumer');
-      setRole('consumer');
     } catch (error) {
       console.error("Lỗi kiểm tra quyền:", error);
     }
   };
 
-  const handleLogin = (user) => {
-    setIsAuthenticated(true);
-    setCurrentUser(user);
-    if (user.role === 'admin') {
-      setRole('admin');
-    } else {
-      setRole('consumer');
-    }
-  };
+  // handleLogin/Logout removed
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setCurrentUser(null);
-    setAccount(null);
-    setContract(null);
-    setRole('consumer');
-    setUserRole('consumer');
-  };
 
-  if (!isAuthenticated) {
-    return <Login onLogin={handleLogin} />;
-  }
+  const location = useLocation();
+
+  // Highlight active link
+  const getLinkClass = (path) => {
+    const isActive = location.pathname === path;
+    return `px-6 py-3 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${isActive
+      ? 'bg-gradient-to-r from-green-600 to-green-500 text-white shadow-lg scale-105'
+      : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-green-600 shadow-sm border border-gray-100'
+      }`;
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
-      <header className="bg-green-600 text-white p-4 shadow-md">
-        <div className="container mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <img src={logo} alt="Logo" className="h-24 w-24 bg-white rounded-full p-1 shadow-lg" />
-            <div>
-              <h1 className="text-3xl font-bold uppercase tracking-wide">
-                Truy Xuất Nguồn Gốc Gạo
-              </h1>
-              <p className="text-green-100 text-sm font-medium tracking-wider">NĂNG SUẤT XANH - NÔNG NGHIỆP SẠCH</p>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-yellow-50 font-sans text-gray-900">
+
+      {/* 1. Header gọn nhẹ (Chỉ chứa WalletConnect) */}
+      <header className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-gray-200">
+        <div className="container mx-auto px-6 py-3 flex justify-between items-center">
+          {/* Logo nhỏ góc trái để nhận diện thương hiệu nếu cần, user bảo 'ở trên khỏi cần logo cho rộng' -> Em để text nhỏ thôi */}
+          <div className="text-green-800 font-bold text-lg flex items-center gap-2">
+            🌾 RiceTracking
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right hidden md:block">
-              <p className="font-bold text-sm">Xin chào, {currentUser?.username}</p>
-              <button
-                onClick={handleLogout}
-                className="text-xs text-green-100 hover:text-white underline"
-              >
-                Đăng xuất
-              </button>
-            </div>
-            <WalletConnect account={account} setAccount={setAccount} />
-          </div>
+          <WalletConnect account={account} setAccount={setAccount} />
         </div>
       </header>
 
       <main className="container mx-auto p-6">
-        <div className="mb-6 flex justify-center gap-4">
-          <button
-            onClick={() => setRole('consumer')}
-            className={`px-4 py-2 rounded-full font-medium transition ${role === 'consumer' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
-          >
-            Người Tiêu Dùng
-          </button>
 
-          {/* Chỉ hiển thị nút Dashboard nếu user có quyền tương ứng */}
-          {(userRole === 'farmer' || userRole === 'admin') && (
-            <button
-              onClick={() => setRole('farmer')}
-              className={`px-4 py-2 rounded-full font-medium transition ${role === 'farmer' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
-            >
-              Nông Dân
-            </button>
-          )}
+        {/* 2. Menu Điều Hướng (Navigation Bar) */}
+        <nav className="flex flex-wrap justify-center gap-4 mb-10">
+          <Link to="/" className={getLinkClass("/")}>
+            🏠 Trang Chủ
+          </Link>
+          <Link to="/search" className={getLinkClass("/search")}>
+            🔍 Tra Cứu
+          </Link>
 
-          {(userRole === 'miller' || userRole === 'admin') && (
-            <button
-              onClick={() => setRole('miller')}
-              className={`px-4 py-2 rounded-full font-medium transition ${role === 'miller' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
-            >
-              Nhà Máy
-            </button>
-          )}
+          {/* Chỉ hiện hoặc disable nếu không có quyền? User muốn hiện hết. */}
+          <Link to="/manage" className={getLinkClass("/manage")}>
+            📦 Quản Lý Sản Phẩm
+            {/* Badge Role check */}
+            {(userRole === 'farmer' || userRole === 'admin') && <span className="ml-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>}
+          </Link>
 
-          {/* Chỉ hiển thị nút Admin nếu đăng nhập web là admin */}
-          {currentUser?.role === 'admin' && (
-            <button
-              onClick={() => setRole('admin')}
-              className={`px-4 py-2 rounded-full font-medium transition ${role === 'admin' ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
-            >
-              Admin
-            </button>
+          {userRole === 'admin' && (
+            <Link to="/admin" className={getLinkClass("/admin")}>
+              🛡️ Admin
+              <span className="ml-1 w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
+            </Link>
           )}
+        </nav>
+
+        {/* 3. Nội dung chính */}
+        <div className="bg-white/90 backdrop-blur rounded-3xl shadow-2xl p-8 min-h-[600px] border border-white relative overflow-hidden">
+          {/* Trang trí nền */}
+          <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 bg-green-200 rounded-full opacity-20 blur-3xl"></div>
+          <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-yellow-200 rounded-full opacity-20 blur-3xl"></div>
+
+          <div className="relative z-10">
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/search" element={<ConsumerView contract={contract} />} />
+
+              <Route path="/manage" element={<ProductManagement contract={contract} account={account} userRole={userRole} />} />
+
+              <Route path="/admin" element={
+                (userRole === 'admin')
+                  ? <AdminDashboard contract={contract} account={account} />
+                  : <div className="text-center py-20 animate-fade-in">
+                    <h2 className="text-2xl font-bold text-purple-800 flex flex-col items-center gap-4 mb-4">
+                      <span>🛡️</span>
+                      <span>Khu Vực Quản Trị Viên</span>
+                    </h2>
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-xl inline-block">
+                      ⛔ <strong>Truy cập bị từ chối:</strong> Ví của bạn không phải là Admin.
+                    </div>
+                  </div>
+              } />
+
+              <Route path="/product/:id" element={<ProductDetail contract={contract} />} />
+            </Routes>
+          </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-lg p-6 min-h-[500px]">
-          {role === 'consumer' && <ConsumerView contract={contract} />}
-          {role === 'farmer' && <FarmerDashboard contract={contract} account={account} userRole={userRole} />}
-          {role === 'miller' && <MillerDashboard contract={contract} account={account} />}
-          {role === 'admin' && <AdminDashboard contract={contract} account={account} />}
-        </div>
       </main>
 
-      <footer className="bg-gray-800 text-gray-400 py-6 text-center mt-12">
-        <p>&copy; 2025 Hệ thống Truy xuất Nguồn gốc Gạo trên Blockchain.</p>
+      <footer className="text-center py-8 text-gray-500 text-sm font-medium">
+        &copy; 2025 BlockChain Rice Tracking System. Power by <span className="text-green-600">NguyenChiToai</span>
       </footer>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
   );
 }
 

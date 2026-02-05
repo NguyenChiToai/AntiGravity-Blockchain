@@ -78,7 +78,7 @@ function WalletConnect({ account, setAccount }) {
                             <div className="w-3 h-3 bg-green-400 rounded-full"></div>
                             <div className="absolute top-0 left-0 w-3 h-3 bg-green-400 rounded-full animate-ping opacity-75"></div>
                         </div>
-                        <span className="font-mono text-sm font-bold text-white tracking-wide">
+                        <span className="font-mono text-sm font-bold text-gray-900 tracking-wide">
                             {account.slice(0, 6)}...{account.slice(-4)}
                         </span>
                     </div>

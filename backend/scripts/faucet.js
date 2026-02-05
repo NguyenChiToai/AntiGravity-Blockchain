@@ -1,8 +1,8 @@
 const hre = require("hardhat");
 
 async function main() {
-    // Lấy địa chỉ ví từ biến môi trường (nếu có), hoặc dùng địa chỉ mặc định
-    const RECEIVER = process.env.RECEIVER || "0x984644b2982b65FF92FEe635FDa87b4A5Ce58029";
+    // Lấy địa chỉ ví từ biến môi trường (nếu có), hoặc dùng địa chỉ mặc định (Account #0 Testnet)
+    const RECEIVER = process.env.RECEIVER || "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
     const AMOUNT = "100"; // 100 ETH
 
     const [sender] = await hre.ethers.getSigners();

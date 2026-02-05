@@ -36,9 +36,17 @@ function Login({ onLogin }) {
             setPassword('');
             setConfirmPassword('');
         } else {
-            // Logic Đăng nhập
+            // Logic Đăng nhập (Demo Hardcoded)
             if (username === 'admin' && password === '12345') {
                 onLogin({ username: 'admin', role: 'admin' });
+                return;
+            }
+            if (username === 'nongdan' && password === '12345') {
+                onLogin({ username: 'nongdan', role: 'farmer' });
+                return;
+            }
+            if (username === 'nhamay' && password === '12345') {
+                onLogin({ username: 'nhamay', role: 'miller' });
                 return;
             }
 
@@ -46,10 +54,39 @@ function Login({ onLogin }) {
             const user = existingUsers.find(u => u.username === username && u.password === password);
 
             if (user) {
-                onLogin({ username: user.username, role: 'user' });
+                onLogin({ username: user.username, role: 'consumer', requestStatus: user.requestStatus });
             } else {
                 setError('Tên đăng nhập hoặc mật khẩu không đúng.');
             }
+        }
+    };
+
+    const handleRequestAccess = () => {
+        const existingUsers = JSON.parse(localStorage.getItem('users') || '[]');
+        const userIndex = existingUsers.findIndex(u => u.username === username);
+
+        if (userIndex !== -1) {
+            existingUsers[userIndex].requestStatus = 'pending';
+            localStorage.setItem('users', JSON.stringify(existingUsers));
+            alert("Đã gửi yêu cầu lên Admin! Vui lòng chờ phê duyệt.");
+        } else {
+            // Create temp user if not exists (for Quick Login scenario without register)
+            // But usually they register. Let's assume they registered relative to localStorage logic.
+            // If Quick Login 'consumer', we might need to add them.
+            alert("Vui lòng Đăng Ký tài khoản trước khi gửi yêu cầu.");
+        }
+    };
+
+    const handleQuickLogin = (role) => {
+        if (role === 'admin') {
+            setUsername('admin');
+            setPassword('12345');
+        } else if (role === 'farmer') {
+            setUsername('nongdan');
+            setPassword('12345');
+        } else if (role === 'miller') {
+            setUsername('nhamay');
+            setPassword('12345');
         }
     };
 
@@ -68,6 +105,20 @@ function Login({ onLogin }) {
                     <h3 className="text-xl font-bold text-gray-800 mb-6 text-center">
                         {isRegistering ? 'Đăng Ký Tài Khoản' : 'Đăng Nhập Hệ Thống'}
                     </h3>
+
+                    {!isRegistering && (
+                        <div className="flex justify-center gap-2 mb-6">
+                            <button onClick={() => handleQuickLogin('admin')} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 font-bold border border-purple-300">
+                                🛡️ Admin
+                            </button>
+                            <button onClick={() => handleQuickLogin('farmer')} className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200 font-bold border border-green-300">
+                                🌾 Nông Dân
+                            </button>
+                            <button onClick={() => handleQuickLogin('miller')} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 font-bold border border-blue-300">
+                                🏭 Nhà Máy
+                            </button>
+                        </div>
+                    )}
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
